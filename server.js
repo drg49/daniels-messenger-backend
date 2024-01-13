@@ -4,38 +4,55 @@ const socketIO = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIO(server);
+const io = socketIO(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
+});
 
-const activeUsers = [];
+const waitingUsers = [];
 
 io.on('connection', (socket) => {
-  console.log('A user connected');
+  console.log(`User connected: ${socket.id}`);
 
-  // Add user to the active users list
-  activeUsers.push(socket.id);
+  // Add user to the waiting list
+  waitingUsers.push(socket);
 
-  // Pair random users and create a chat room
-  if (activeUsers.length >= 2) {
-    const user1 = activeUsers.pop();
-    const user2 = activeUsers.pop();
+  // Check if there are enough waiting users to pair
+  if (waitingUsers.length >= 2) {
+    const user1 = waitingUsers.shift();
+    const user2 = waitingUsers.shift();
 
-    socket.to(user1).emit('paired', user2);
-    socket.to(user2).emit('paired', user1);
+    // Notify paired users
+    user1.pair = user2.id;
+    user2.pair = user1.id;
+
+    user1.emit('paired', user2.id);
+    user2.emit('paired', user1.id);
+
+    console.log(`Users paired: ${user1.id} and ${user2.id}`);
   }
 
   // Listen for messages
   socket.on('message', (message) => {
     // Broadcast the message to the paired user
-    socket.broadcast.to(socket.pair).emit('message', message);
+    socket.broadcast.to(socket.pair).emit('message', { from: 'stranger', text: message });
   });
 
   // Handle disconnection
   socket.on('disconnect', () => {
-    console.log('A user disconnected');
-    // Remove user from the active users list
-    const index = activeUsers.indexOf(socket.id);
+    console.log(`User disconnected: ${socket.id}`);
+
+    // Remove user from the waiting list
+    const index = waitingUsers.indexOf(socket);
     if (index !== -1) {
-      activeUsers.splice(index, 1);
+      waitingUsers.splice(index, 1);
+    }
+
+    // Notify the paired user about the disconnection
+    if (socket.pair) {
+      io.to(socket.pair).emit('disconnected');
     }
   });
 });
