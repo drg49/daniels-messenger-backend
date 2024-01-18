@@ -40,6 +40,12 @@ io.on('connection', (socket) => {
     socket.broadcast.to(socket.pair).emit('message', { from: 'stranger', text: message });
   });
 
+  // Listen for typing status
+  socket.on('typing', (isTyping) => {
+    // Broadcast the typing status to the paired user
+    socket.broadcast.to(socket.pair).emit('typing', isTyping);
+  });
+
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
